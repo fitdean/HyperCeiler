@@ -26,8 +26,8 @@ public class AppDataManager {
             return switch (modeSelection) {
                 case SubPickerActivity.LAUNCHER_MODE,
                      SubPickerActivity.CALLBACK_MODE,
-                     SubPickerActivity.LAUNCHER_PICK_MODE,
                      SubPickerActivity.INPUT_MODE -> getLauncherApps();
+                case SubPickerActivity.LAUNCHER_PICK_MODE -> getMainEntryApps();
                 case SubPickerActivity.APP_OPEN_MODE -> getOpenWithApps();
                 case SubPickerActivity.PROCESS_TEXT_MODE -> getProcessTextApps();
                 case SubPickerActivity.IME_MODE -> getInputMethodApps();
@@ -54,6 +54,45 @@ public class AppDataManager {
                 List<ResolveInfo> resolveInfoList = new ArrayList<>();
 
                 for (ResolveInfo resolveInfo : resolveInfosHaveNoLauncher) {
+                    if (resolveInfo.activityInfo == null) continue;
+
+                    String packageName = resolveInfo.activityInfo.applicationInfo.packageName;
+                    if (!mPackageMap.containsKey(packageName)) {
+                        mPackageMap.put(packageName, 1);
+                        resolveInfoList.add(resolveInfo);
+                    }
+                }
+
+                Collator collator = Collator.getInstance(Locale.getDefault());
+                resolveInfoList.sort((r1, r2) -> {
+                    CharSequence label1 = r1.loadLabel(pm);
+                    CharSequence label2 = r2.loadLabel(pm);
+                    return collator.compare(
+                        label1.toString(),
+                        label2.toString()
+                    );
+                });
+                return new ArrayList<>(resolveInfoList);
+            }
+        });
+    }
+
+    private List<AppData> getMainEntryApps() {
+        return PackagesUtils.getPackagesByCode(new PackagesUtils.IPackageCode() {
+            @Override
+            public List<Parcelable> getPackageCodeList(PackageManager pm) {
+                // Restore the broader OS2-style picker so gesture app launch can
+                // also target system apps that expose a main entry but not a
+                // standard launcher icon.
+                List<ResolveInfo> resolveInfos = pm.queryIntentActivities(
+                    new Intent(Intent.ACTION_MAIN),
+                    PackageManager.GET_ACTIVITIES | PackageManager.MATCH_DEFAULT_ONLY
+                );
+
+                mPackageMap.clear();
+                List<ResolveInfo> resolveInfoList = new ArrayList<>();
+
+                for (ResolveInfo resolveInfo : resolveInfos) {
                     if (resolveInfo.activityInfo == null) continue;
 
                     String packageName = resolveInfo.activityInfo.applicationInfo.packageName;
