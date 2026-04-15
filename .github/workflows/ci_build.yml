@@ -351,6 +351,8 @@ jobs:
       - name: Post to Debug Group
         shell: bash
         env:
+          GIT_ACTOR: ${{ secrets.GIT_ACTOR }}
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
           GROUP_DEBUG_ID: ${{ secrets.GROUP_DEBUG_ID }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           DEBUG: ${{ env.APK_FILE_DEBUG }}
