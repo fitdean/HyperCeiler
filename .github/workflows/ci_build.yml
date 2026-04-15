@@ -1,95 +1,95 @@
 name: CI Build
 
-  on:
-    pull_request:
-      types: [opened, synchronize]
-      paths-ignore:
-        - ".github/**"
-        - "!.github/workflows/**"
-        - ".idea/"
-        - "doc/*"
-        - "*.md"
-        - "imgs/*"
-        - "app/src/assets/**"
-        - "crowdin.yml"
-    push:
-      branches: [main]
-      paths-ignore:
-        - ".github/**"
-        - "!.github/workflows/**"
-        - ".idea/"
-        - "doc/*"
-        - "*.md"
-        - "imgs/*"
-        - "app/src/assets/**"
-        - ".github/workflows/crowdin.yml"
-        - "crowdin.yml"
-    workflow_dispatch:
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths-ignore:
+      - ".github/**"
+      - "!.github/workflows/**"
+      - ".idea/"
+      - "doc/*"
+      - "*.md"
+      - "imgs/*"
+      - "app/src/assets/**"
+      - "crowdin.yml"
+  push:
+    branches: [main]
+    paths-ignore:
+      - ".github/**"
+      - "!.github/workflows/**"
+      - ".idea/"
+      - "doc/*"
+      - "*.md"
+      - "imgs/*"
+      - "app/src/assets/**"
+      - ".github/workflows/crowdin.yml"
+      - "crowdin.yml"
+  workflow_dispatch:
 
-  jobs:
-    build_app:
-      runs-on: macos-latest
-      name: Build Debug APK
-      env:
-        GIT_ACTOR: ${{ secrets.GIT_ACTOR }}
-        GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+jobs:
+  build_app:
+    runs-on: macos-latest
+    name: Build Debug APK
+    env:
+      GIT_ACTOR: ${{ secrets.GIT_ACTOR }}
+      GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
 
-      steps:
-        - name: Checkout Git Repository
-          uses: actions/checkout@v6
-          with:
-            fetch-depth: 0
-            submodules: true
+    steps:
+      - name: Checkout Git Repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: true
 
-        - name: Setup JDK
-          uses: actions/setup-java@v5
-          with:
-            distribution: "temurin"
-            java-version: "21"
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "21"
 
-        - name: Setup Gradle
-          uses: gradle/actions/setup-gradle@v6
-          with:
-            cache-overwrite-existing: true
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-overwrite-existing: true
 
-        - name: Validate GitHub Packages Credentials
-          shell: bash
-          run: |
-            if [ -z "${GIT_ACTOR:-}" ] || [ -z "${GIT_TOKEN:-}" ]; then
-              echo "Missing repository secrets: GIT_ACTOR or GIT_TOKEN"
-              exit 1
-            fi
+      - name: Validate GitHub Packages Credentials
+        shell: bash
+        run: |
+          if [ -z "${GIT_ACTOR:-}" ] || [ -z "${GIT_TOKEN:-}" ]; then
+            echo "Missing repository secrets: GIT_ACTOR or GIT_TOKEN"
+            exit 1
+          fi
 
-        - name: Build with Gradle (Debug)
-          shell: bash
-          run: |
-            ./gradlew assembleDebug --stacktrace
+      - name: Build with Gradle (Debug)
+        shell: bash
+        run: |
+          ./gradlew assembleDebug --stacktrace
 
-        - name: Find APK
-          id: find_apk
-          shell: bash
-          run: |
-            APK_FILE=$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)
-            if [ -z "$APK_FILE" ]; then
-              echo "No APK found in app/build/outputs/apk/debug"
-              exit 1
-            fi
-            echo "apk_file=$APK_FILE" >> "$GITHUB_OUTPUT"
-            echo "apk_name=$(basename "$APK_FILE" .apk)" >> "$GITHUB_OUTPUT"
+      - name: Find APK
+        id: find_apk
+        shell: bash
+        run: |
+          APK_FILE=$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)
+          if [ -z "$APK_FILE" ]; then
+            echo "No APK found in app/build/outputs/apk/debug"
+            exit 1
+          fi
+          echo "apk_file=$APK_FILE" >> "$GITHUB_OUTPUT"
+          echo "apk_name=$(basename "$APK_FILE" .apk)" >> "$GITHUB_OUTPUT"
 
-        - name: Show APK SHA256
-          if: success()
-          shell: bash
-          run: |
-            echo "### Build Success" >> "$GITHUB_STEP_SUMMARY"
-            echo "|Artifact|SHA256|" >> "$GITHUB_STEP_SUMMARY"
-            echo "|:---:|:---|" >> "$GITHUB_STEP_SUMMARY"
-            APK_SHA256=$(shasum -a 256 "${{ steps.find_apk.outputs.apk_file }}" | awk '{print $1}')
-            echo "|Debug|$APK_SHA256|" >> "$GITHUB_STEP_SUMMARY"
+      - name: Show APK SHA256
+        if: success()
+        shell: bash
+        run: |
+          echo "### Build Success" >> "$GITHUB_STEP_SUMMARY"
+          echo "|Artifact|SHA256|" >> "$GITHUB_STEP_SUMMARY"
+          echo "|:---:|:---|" >> "$GITHUB_STEP_SUMMARY"
+          APK_SHA256=$(shasum -a 256 "${{ steps.find_apk.outputs.apk_file }}" | awk '{print $1}')
+          echo "|Debug|$APK_SHA256|" >> "$GITHUB_STEP_SUMMARY"
 
-        - name: Upload APK
-          uses: actions/upload-artifact@v7
-          with:
-            name: ${{ steps.find_apk.outputs.apk_name }}
-            path: ${{ steps.find_apk.outputs.apk_file }}
-            compression-level: 9
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.find_apk.outputs.apk_name }}
+          path: ${{ steps.find_apk.outputs.apk_file }}
+          compression-level: 9
