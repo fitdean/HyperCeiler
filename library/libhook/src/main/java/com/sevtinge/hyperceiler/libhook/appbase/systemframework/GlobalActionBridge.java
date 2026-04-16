@@ -23,6 +23,9 @@ import static java.lang.System.currentTimeMillis;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.media.AudioManager;
 import android.provider.Settings;
 import android.view.KeyEvent;
@@ -31,6 +34,8 @@ import com.sevtinge.hyperceiler.common.log.AndroidLog;
 import com.sevtinge.hyperceiler.common.utils.PrefsBridge;
 import com.sevtinge.hyperceiler.libhook.appbase.systemui.StatusBarActionBridge;
 import com.sevtinge.hyperceiler.libhook.base.BaseHook;
+
+import java.util.List;
 
 public final class GlobalActionBridge {
     public static final String ACTION_TOGGLE_COLOR_INVERSION = BaseHook.ACTION_PREFIX + "ToggleColorInversion";
@@ -92,7 +97,7 @@ public final class GlobalActionBridge {
     }
 
     public static boolean launchAppIntent(Context context, String key, boolean skipLock) {
-        return launchIntent(context, getIntent(key, IntentType.APP, skipLock));
+        return launchIntent(context, getIntent(context, key, IntentType.APP, skipLock));
     }
 
     public static boolean launchIntent(Context context, Intent intent) {
@@ -155,7 +160,142 @@ public final class GlobalActionBridge {
     }
 
     public static Intent getIntent(Context context, String prefs, IntentType intentType, boolean skipLock) {
-        return getIntent(prefs, intentType, skipLock);
+        if (context == null || intentType != IntentType.APP) {
+            return getIntent(prefs, intentType, skipLock);
+        }
+
+        try {
+            String prefKey = prefs + "_app";
+            String prefValue = PrefsBridge.getString(prefKey, null);
+            if (prefValue == null) {
+                return null;
+            }
+
+            String[] pkgAppArray = prefValue.split("\\|", 2);
+            String packageName = pkgAppArray.length > 0 ? pkgAppArray[0] : null;
+            String activityName = pkgAppArray.length > 1 ? pkgAppArray[1] : null;
+            if (packageName == null || packageName.isBlank()) {
+                return null;
+            }
+
+            Intent intent = buildAppIntent(context, packageName, activityName);
+            if (intent == null) {
+                return null;
+            }
+
+            int user = PrefsBridge.getInt(prefKey + "_user", 0);
+            if (user != 0) {
+                intent.putExtra("user", user);
+            }
+
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            if (skipLock) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                intent.putExtra("ShowCameraWhenLocked", true);
+                intent.putExtra("StartActivityWhenLocked", true);
+            }
+            return intent;
+        } catch (Throwable t) {
+            AndroidLog.w("GlobalActionBridge", "system", "getIntent", t);
+            return getIntent(prefs, intentType, skipLock);
+        }
+    }
+
+    private static Intent buildAppIntent(Context context, String packageName, String activityName) {
+        PackageManager packageManager = context.getPackageManager();
+
+        Intent launcherIntent = packageManager.getLaunchIntentForPackage(packageName);
+        if (isMatchingComponent(launcherIntent, packageName, activityName)) {
+            return launcherIntent;
+        }
+
+        Intent mainIntent = findMainIntent(packageManager, packageName, activityName);
+        if (mainIntent != null) {
+            return mainIntent;
+        }
+
+        if (activityName != null && !activityName.isBlank()) {
+            Intent explicitIntent = new Intent(Intent.ACTION_MAIN);
+            explicitIntent.setComponent(new ComponentName(packageName, activityName));
+            return explicitIntent;
+        }
+
+        return launcherIntent;
+    }
+
+    private static Intent findMainIntent(PackageManager packageManager, String packageName, String activityName) {
+        Intent mainIntent = new Intent(Intent.ACTION_MAIN);
+        mainIntent.setPackage(packageName);
+
+        List<ResolveInfo> resolveInfos = packageManager.queryIntentActivities(
+            mainIntent,
+            PackageManager.MATCH_DEFAULT_ONLY | PackageManager.MATCH_DISABLED_COMPONENTS
+        );
+        if (resolveInfos == null || resolveInfos.isEmpty()) {
+            return null;
+        }
+
+        ResolveInfo preferredResolveInfo = null;
+        ResolveInfo fallbackResolveInfo = null;
+
+        for (ResolveInfo resolveInfo : resolveInfos) {
+            ActivityInfo info = resolveInfo.activityInfo;
+            if (info == null || !packageName.equals(info.packageName)) {
+                continue;
+            }
+
+            if (fallbackResolveInfo == null) {
+                fallbackResolveInfo = resolveInfo;
+            }
+            if (activityName != null && activityName.equals(info.name)) {
+                preferredResolveInfo = resolveInfo;
+                break;
+            }
+        }
+
+        ResolveInfo targetResolveInfo = preferredResolveInfo != null ? preferredResolveInfo : fallbackResolveInfo;
+        if (targetResolveInfo == null || targetResolveInfo.activityInfo == null) {
+            return null;
+        }
+
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.setComponent(new ComponentName(packageName, targetResolveInfo.activityInfo.name));
+        if (isLauncherActivity(packageManager, packageName, targetResolveInfo.activityInfo.name)) {
+            intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        }
+        return intent;
+    }
+
+    private static boolean isLauncherActivity(PackageManager packageManager, String packageName, String activityName) {
+        Intent launcherQueryIntent = new Intent(Intent.ACTION_MAIN);
+        launcherQueryIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+        launcherQueryIntent.setPackage(packageName);
+
+        List<ResolveInfo> resolveInfos = packageManager.queryIntentActivities(
+            launcherQueryIntent,
+            PackageManager.MATCH_DEFAULT_ONLY | PackageManager.MATCH_DISABLED_COMPONENTS
+        );
+        if (resolveInfos == null) {
+            return false;
+        }
+
+        for (ResolveInfo resolveInfo : resolveInfos) {
+            ActivityInfo info = resolveInfo.activityInfo;
+            if (info != null && packageName.equals(info.packageName) && activityName.equals(info.name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isMatchingComponent(Intent intent, String packageName, String activityName) {
+        if (intent == null || intent.getComponent() == null) {
+            return false;
+        }
+        ComponentName componentName = intent.getComponent();
+        return packageName.equals(componentName.getPackageName())
+            && activityName != null
+            && activityName.equals(componentName.getClassName());
     }
 
     public static boolean isMediaActionsAllowed(Context context) {
