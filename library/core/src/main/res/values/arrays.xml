@@ -45,11 +45,11 @@
     <string-array name="multi_action_title">
         <item>@string/array_global_actions_none</item>
         <item>@string/array_global_actions_notif</item>
+        <item>@string/array_global_actions_clear_memory</item>
+        <item>@string/array_global_actions_invert_colors</item>
         <item>@string/array_global_actions_lock</item>
         <item>@string/array_global_actions_sleep</item>
         <item>@string/array_global_actions_screenshot</item>
-        <item>@string/array_global_actions_clear_memory</item>
-        <item>@string/array_global_actions_invert_colors</item>
         <item>@string/array_global_actions_recents</item>
         <item>@string/array_global_actions_volume</item>
         <item>@string/array_global_actions_powermenu</item>
@@ -59,11 +59,11 @@
     <string-array name="multi_action_key">
         <item>prefs_key_no_action</item>
         <item>prefs_key_open_notification_center</item>
+        <item>prefs_key_clear_memory</item>
+        <item>prefs_key_invert_colors</item>
         <item>prefs_key_screen_lock</item>
         <item>prefs_key_screen_sleep</item>
         <item>prefs_key_screen_capture</item>
-        <item>prefs_key_clear_memory</item>
-        <item>prefs_key_invert_colors</item>
         <item>prefs_key_screen_recents</item>
         <item>prefs_key_volume_dialog</item>
         <item>prefs_key_open_powermenu</item>
