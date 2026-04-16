@@ -1,86 +1,223 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
-  ~ This file is part of HyperCeiler.
-  ~
-  ~ HyperCeiler is free software: you can redistribute it and/or modify
-  ~ it under the terms of the GNU Affero General Public License as
-  ~ published by the Free Software Foundation, either version 3 of the
-  ~ License.
-  ~
-  ~ This program is distributed in the hope that it will be useful,
-  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
-  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  ~ GNU Affero General Public License for more details.
-  ~
-  ~ You should have received a copy of the GNU Affero General Public License
-  ~ along with this program.  If not, see <https://www.gnu.org/licenses/>.
-  ~
-  ~ Copyright (C) 2023-2026 HyperCeiler Contributions
-  -->
-<resources>
-    <string-array name="restart_apps_name_hyperos">
-        <item>@string/system_ui</item>
-        <item>@string/mihome</item>
-        <item>@string/system_settings</item>
-        <item>@string/security_center_hyperos</item>
-        <!--<item>@string/personal_assistant</item>
-        <item>@string/notes</item>
-        <item>@string/powerkeeper</item>
-        <item>@string/joyose</item>
-        <item>@string/networkboost</item>-->
-    </string-array>
+package com.sevtinge.hyperceiler.model.data;
 
-    <string-array name="restart_apps_packagename">
-        <item>com.android.systemui</item>
-        <item>com.miui.home</item>
-        <item>com.android.settings</item>
-        <item>com.miui.securitycenter</item>
-        <!--<item>com.miui.personalassistant</item>
-        <item>com.miui.notes</item>
-        <item>com.miui.powerkeeper</item>
-        <item>com.xiaomi.joyose</item>
-        <item>com.xiaomi.NetworkBoost</item>-->
-    </string-array>
+import android.content.Intent;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.os.Parcelable;
 
-    <string-array name="multi_action_title">
-        <item>@string/array_global_actions_none</item>
-        <item>@string/array_global_actions_notif</item>
-        <item>@string/array_global_actions_clear_memory</item>
-        <item>@string/array_global_actions_invert_colors</item>
-        <item>@string/array_global_actions_lock</item>
-        <item>@string/array_global_actions_sleep</item>
-        <item>@string/array_global_actions_screenshot</item>
-        <item>@string/array_global_actions_recents</item>
-        <item>@string/array_global_actions_volume</item>
-        <item>@string/array_global_actions_powermenu</item>
-        <item>@string/array_global_actions_launch</item>
-    </string-array>
+import com.sevtinge.hyperceiler.common.log.AndroidLog;
+import com.sevtinge.hyperceiler.sub.SubPickerActivity;
+import com.sevtinge.hyperceiler.utils.PackagesUtils;
 
-    <string-array name="multi_action_key">
-        <item>prefs_key_no_action</item>
-        <item>prefs_key_open_notification_center</item>
-        <item>prefs_key_clear_memory</item>
-        <item>prefs_key_invert_colors</item>
-        <item>prefs_key_screen_lock</item>
-        <item>prefs_key_screen_sleep</item>
-        <item>prefs_key_screen_capture</item>
-        <item>prefs_key_screen_recents</item>
-        <item>prefs_key_volume_dialog</item>
-        <item>prefs_key_open_powermenu</item>
-        <item>prefs_key_open_app</item>
-    </string-array>
+import java.text.Collator;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 
-    <integer-array name="multi_action_value">
-        <item>0</item>
-        <item>1</item>
-        <item>2</item>
-        <item>3</item>
-        <item>4</item>
-        <item>5</item>
-        <item>6</item>
-        <item>7</item>
-        <item>8</item>
-        <item>12</item>
-        <item>13</item>
-    </integer-array>
-</resources>
+public class AppDataManager {
+
+    private static final String TAG = "AppDataManager";
+    private final HashMap<String, Integer> mPackageMap = new HashMap<>();
+
+    public List<AppData> getAppInfo(int modeSelection) {
+        try {
+            return switch (modeSelection) {
+                case SubPickerActivity.LAUNCHER_MODE,
+                     SubPickerActivity.CALLBACK_MODE,
+                     SubPickerActivity.INPUT_MODE -> getLauncherApps();
+                case SubPickerActivity.LAUNCHER_PICK_MODE -> getMainEntryApps();
+                case SubPickerActivity.APP_OPEN_MODE -> getOpenWithApps();
+                case SubPickerActivity.PROCESS_TEXT_MODE -> getProcessTextApps();
+                case SubPickerActivity.IME_MODE -> getInputMethodApps();
+                case SubPickerActivity.ALL_APPS_MODE, SubPickerActivity.SCOPE_MODE -> getAllApps();
+                default -> new ArrayList<>();
+            };
+        } catch (Exception e) {
+            AndroidLog.e(TAG, "getAppInfo failed for mode " + modeSelection, e);
+            return new ArrayList<>();
+        }
+    }
+
+    private List<AppData> getLauncherApps() {
+        return PackagesUtils.getPackagesByCode(new PackagesUtils.IPackageCode() {
+            @Override
+            public List<Parcelable> getPackageCodeList(PackageManager pm) {
+                Intent intent = new Intent(Intent.ACTION_MAIN);
+                intent.addCategory(Intent.CATEGORY_LAUNCHER);
+
+                List<ResolveInfo> resolveInfosHaveNoLauncher =
+                    pm.queryIntentActivities(intent, PackageManager.MATCH_ALL);
+
+                mPackageMap.clear();
+                List<ResolveInfo> resolveInfoList = new ArrayList<>();
+
+                for (ResolveInfo resolveInfo : resolveInfosHaveNoLauncher) {
+                    if (resolveInfo.activityInfo == null) continue;
+
+                    String packageName = resolveInfo.activityInfo.applicationInfo.packageName;
+                    if (!mPackageMap.containsKey(packageName)) {
+                        mPackageMap.put(packageName, 1);
+                        resolveInfoList.add(resolveInfo);
+                    }
+                }
+
+                Collator collator = Collator.getInstance(Locale.getDefault());
+                resolveInfoList.sort((r1, r2) -> {
+                    CharSequence label1 = r1.loadLabel(pm);
+                    CharSequence label2 = r2.loadLabel(pm);
+                    return collator.compare(
+                        label1.toString(),
+                        label2.toString()
+                    );
+                });
+                return new ArrayList<>(resolveInfoList);
+            }
+        });
+    }
+
+    private List<AppData> getMainEntryApps() {
+        return PackagesUtils.getPackagesByCode(new PackagesUtils.IPackageCode() {
+            @Override
+            public List<Parcelable> getPackageCodeList(PackageManager pm) {
+                // Restore the broader OS2-style picker so gesture app launch can
+                // also target system apps that expose a main entry but not a
+                // standard launcher icon.
+                List<ResolveInfo> resolveInfos = pm.queryIntentActivities(
+                    new Intent(Intent.ACTION_MAIN),
+                    PackageManager.GET_ACTIVITIES | PackageManager.MATCH_DEFAULT_ONLY
+                );
+
+                mPackageMap.clear();
+                List<ResolveInfo> resolveInfoList = new ArrayList<>();
+
+                for (ResolveInfo resolveInfo : resolveInfos) {
+                    if (resolveInfo.activityInfo == null) continue;
+
+                    String packageName = resolveInfo.activityInfo.applicationInfo.packageName;
+                    if (!mPackageMap.containsKey(packageName)) {
+                        mPackageMap.put(packageName, 1);
+                        resolveInfoList.add(resolveInfo);
+                    }
+                }
+
+                Collator collator = Collator.getInstance(Locale.getDefault());
+                resolveInfoList.sort((r1, r2) -> {
+                    CharSequence label1 = r1.loadLabel(pm);
+                    CharSequence label2 = r2.loadLabel(pm);
+                    return collator.compare(
+                        label1.toString(),
+                        label2.toString()
+                    );
+                });
+                return new ArrayList<>(resolveInfoList);
+            }
+        });
+    }
+
+    private List<AppData> getOpenWithApps() {
+        try {
+            return PackagesUtils.getOpenWithApps();
+        } catch (Exception e) {
+            AndroidLog.e(TAG, "getOpenWithApps failed", e);
+            return new ArrayList<>();
+        }
+    }
+
+    private List<AppData> getProcessTextApps() {
+        return PackagesUtils.getPackagesByCode(new PackagesUtils.IPackageCode() {
+            @Override
+            public List<Parcelable> getPackageCodeList(PackageManager pm) {
+                Intent intent = new Intent()
+                    .setAction(Intent.ACTION_PROCESS_TEXT)
+                    .setType("text/plain");
+                intent.putExtra("HyperCeiler", true);
+
+                List<ResolveInfo> resolveInfos =
+                    pm.queryIntentActivities(intent, PackageManager.GET_ACTIVITIES | PackageManager.MATCH_DEFAULT_ONLY);
+                List<ResolveInfo> resolveInfoList = new ArrayList<>();
+
+                mPackageMap.clear();
+                for (ResolveInfo resolveInfo : resolveInfos) {
+                    if (resolveInfo.activityInfo == null) continue;
+
+                    String packageName = resolveInfo.activityInfo.applicationInfo.packageName;
+                    if (!mPackageMap.containsKey(packageName)) {
+                        mPackageMap.put(packageName, 1);
+                        resolveInfoList.add(resolveInfo);
+                    }
+                }
+                return new ArrayList<>(resolveInfoList);
+            }
+        });
+    }
+
+    private List<AppData> getAllApps() {
+        return PackagesUtils.getPackagesByCode(new PackagesUtils.IPackageCode() {
+            @Override
+            public List<Parcelable> getPackageCodeList(PackageManager pm) {
+                Intent intent = new Intent(Intent.ACTION_MAIN);
+                intent.addCategory(Intent.CATEGORY_LAUNCHER);
+
+                List<ApplicationInfo> applicationInfos = pm.getInstalledApplications(0);
+
+                mPackageMap.clear();
+                List<ApplicationInfo> resolveInfoList = new ArrayList<>();
+
+                for (ApplicationInfo appInfo : applicationInfos) {
+                    String packageName = appInfo.packageName;
+                    if (!mPackageMap.containsKey(packageName)) {
+                        mPackageMap.put(packageName, 1);
+                        resolveInfoList.add(appInfo);
+                    }
+                }
+
+                Collator collator = Collator.getInstance(Locale.getDefault());
+                resolveInfoList.sort((r1, r2) -> {
+                    CharSequence label1 = r1.loadLabel(pm);
+                    CharSequence label2 = r2.loadLabel(pm);
+                    return collator.compare(
+                        label1.toString(),
+                        label2.toString()
+                    );
+                });
+                return new ArrayList<>(resolveInfoList);
+            }
+        });
+    }
+
+    private List<AppData> getInputMethodApps() {
+        return PackagesUtils.getPackagesByCode(new PackagesUtils.IPackageCode() {
+            @Override
+            public List<Parcelable> getPackageCodeList(PackageManager pm) {
+                Intent intent = new Intent("android.view.InputMethod");
+                List<ResolveInfo> resolveInfos = pm.queryIntentServices(
+                    intent, PackageManager.MATCH_ALL | PackageManager.MATCH_DISABLED_COMPONENTS);
+
+                mPackageMap.clear();
+                List<Parcelable> appInfoList = new ArrayList<>();
+                for (ResolveInfo resolveInfo : resolveInfos) {
+                    if (resolveInfo.serviceInfo == null || resolveInfo.serviceInfo.applicationInfo == null) {
+                        continue;
+                    }
+
+                    ApplicationInfo appInfo = resolveInfo.serviceInfo.applicationInfo;
+                    String packageName = appInfo.packageName;
+                    if (!mPackageMap.containsKey(packageName)) {
+                        mPackageMap.put(packageName, 1);
+                        appInfoList.add(appInfo);
+                    }
+                }
+
+                Collator collator = Collator.getInstance(Locale.getDefault());
+                appInfoList.sort((left, right) -> {
+                    CharSequence label1 = ((ApplicationInfo) left).loadLabel(pm);
+                    CharSequence label2 = ((ApplicationInfo) right).loadLabel(pm);
+                    return collator.compare(label1.toString(), label2.toString());
+                });
+                return appInfoList;
+            }
+        });
+    }
+}
